@@ -1,41 +1,13 @@
 
-import os
-
-import mysql.connector
 from mysql.connector import Error
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
+from mysql_connection import MySQLConnection
 
 load_dotenv()
 
-# --------------------------------------------------
-# MySQL configuration
-# --------------------------------------------------
-
-MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
-MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-MYSQL_USER = os.getenv("MYSQL_USER", "root")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
-MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "local_llm_lab")
-
 router = APIRouter(prefix="/mysql", tags=["MySQL Table Setup"])
 
-
-def get_mysql_connection():
-    """Connect to the existing MySQL database."""
-    return mysql.connector.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE,
-        connection_timeout=10,
-    )
-
-
-# --------------------------------------------------
-# Shared table/column synchronization
-# --------------------------------------------------
 
 def sync_table(table_name: str, columns: dict):
     """
@@ -47,10 +19,9 @@ def sync_table(table_name: str, columns: dict):
     cursor = None
 
     try:
-        connection = get_mysql_connection()
+        connection = MySQLConnection.get_connection(connection_timeout=10)
         cursor = connection.cursor()
 
-        # Table and column definitions are internal constants.
         column_definitions = ", ".join(
             f"`{name}` {definition}"
             for name, definition in columns.items()
