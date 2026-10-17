@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from mysql_setup import router as mysql_router
 from chat import router as chat_router
+from app_logging import router as logging_router
 from rag import router as rag_router
 
 load_dotenv()
@@ -28,6 +29,7 @@ app.add_middleware(
 
 app.include_router(mysql_router)
 app.include_router(chat_router)
+app.include_router(logging_router)
 app.include_router(rag_router)
 
 @app.get("/health")

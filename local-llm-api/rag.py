@@ -2,9 +2,10 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from chroma_connection import ChromaConnection
+
 
 router = APIRouter(
     prefix="/rag",
@@ -13,14 +14,73 @@ router = APIRouter(
 
 
 class DocumentCreate(BaseModel):
-    document_id: str = Field(min_length=1, max_length=200)
-    text: str = Field(min_length=1)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "document_id": "doc-001",
+                "text": "FastAPI is a Python framework for building APIs.",
+                "metadata": {
+                    "source": "fastapi-guide",
+                    "category": "programming",
+                },
+            }
+        }
+    )
+
+    document_id: str = Field(
+        min_length=1,
+        max_length=200,
+        examples=["doc-001"],
+    )
+
+    text: str = Field(
+        min_length=1,
+        examples=[
+            "FastAPI is a Python framework for building APIs."
+        ],
+    )
+
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        examples=[
+            {
+                "source": "fastapi-guide",
+                "category": "programming",
+            }
+        ],
+    )
 
 
 class DocumentUpdate(BaseModel):
-    text: str = Field(min_length=1)
-    metadata: dict[str, Any] | None = None
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "text": "FastAPI is used to build Python APIs.",
+                "metadata": {
+                    "source": "updated-guide",
+                    "category": "programming",
+                },
+            }
+        }
+    )
+
+    text: str = Field(
+        min_length=1,
+        examples=[
+            "FastAPI is used to build Python APIs."
+        ],
+    )
+
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        examples=[
+            {
+                "source": "updated-guide",
+                "category": "programming",
+            }
+        ],
+    )
+
 
 
 def get_collection():
@@ -29,7 +89,7 @@ def get_collection():
     )
 
 
-@router.post("/documents")
+@router.post("/documents", summary="Create or replace a document")
 def create_document(document: DocumentCreate):
     collection = get_collection()
 
@@ -46,8 +106,11 @@ def create_document(document: DocumentCreate):
 
 
 
-@router.get("/documents")
-def list_documents(limit: int = 20, offset: int = 0):
+@router.get("/documents", summary="List documents")
+def list_documents(
+    limit: int = 20,
+    offset: int = 0,
+):
     if not 1 <= limit <= 100:
         raise HTTPException(
             status_code=400,
@@ -85,8 +148,12 @@ def list_documents(limit: int = 20, offset: int = 0):
     }
 
 
+# Get Single Document
 
-@router.get("/documents/{document_id}")
+@router.get(
+    "/documents/{document_id}",
+    summary="Get a document by ID",
+)
 def get_document(document_id: str):
     collection = get_collection()
 
@@ -109,14 +176,20 @@ def get_document(document_id: str):
 
 
 
-@router.put("/documents/{document_id}")
+@router.put(
+    "/documents/{document_id}",
+    summary="Update an existing document",
+)
 def update_document(
     document_id: str,
     document: DocumentUpdate,
 ):
     collection = get_collection()
 
-    existing = collection.get(ids=[document_id])
+    existing = collection.get(
+        ids=[document_id],
+        include=["metadatas"],
+    )
 
     if not existing["ids"]:
         raise HTTPException(
@@ -142,12 +215,18 @@ def update_document(
     }
 
 
+# Delete Document
 
-@router.delete("/documents/{document_id}")
+@router.delete(
+    "/documents/{document_id}",
+    summary="Delete a document",
+)
 def delete_document(document_id: str):
     collection = get_collection()
 
-    existing = collection.get(ids=[document_id])
+    existing = collection.get(
+        ids=[document_id],
+    )
 
     if not existing["ids"]:
         raise HTTPException(
@@ -155,7 +234,9 @@ def delete_document(document_id: str):
             detail="Document not found",
         )
 
-    collection.delete(ids=[document_id])
+    collection.delete(
+        ids=[document_id],
+    )
 
     return {
         "message": "Document deleted",
