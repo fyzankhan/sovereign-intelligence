@@ -1,7 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import axios from "axios";
 import {
   Bot,
   Brain,
@@ -10,25 +9,24 @@ import {
   Circle,
   Command,
   Plus,
-  Send,
   Sparkles,
-  User,
   Zap,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import "./App.css";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import MessageForm from "@/components/MessageForm";
+import Messages from "@/components/Messages";
+import Sidebar from "@/components/Sidebar";
+import ComingSoon from "@/components/ComingSoon";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
+
+const MEMORY_MODE_OPTIONS = [
+  { value: "with-memory", label: "With memory" },
+  { value: "no-memory", label: "Without memory" },
+];
 
 const SUGGESTIONS = [
   {
@@ -68,6 +66,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [activeFeature, setActiveFeature] = useState("");
 
   const conversationRef = useRef(null);
   const inputRef = useRef(null);
@@ -129,24 +128,15 @@ export default function App() {
           ? history
           : [userMessage];
 
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const response = await axios.post(`${API_URL}${endpoint}`, {
           messages: requestMessages,
-        }),
+        }, {
+          headers: {
+            "Content-Type": "application/json",
+          },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(
-          errorData?.detail || `API error: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       setMessages((prev) => [
         ...prev,
@@ -156,8 +146,12 @@ export default function App() {
         },
       ]);
     } catch (err) {
+      const errorMessage = axios.isAxiosError(err)
+        ? err.response?.data?.detail || `API error: ${err.response?.status || "request failed"}`
+        : err.message;
+
       setError(
-        `${err.message}. Check that FastAPI and Ollama are running.`
+        `${errorMessage}. Check that FastAPI and Ollama are running.`
       );
     } finally {
       setLoading(false);
@@ -231,6 +225,16 @@ export default function App() {
         </div>
       </header>
 
+      <Sidebar side="left" onLinkClick={setActiveFeature} />
+      <Sidebar side="right" onLinkClick={setActiveFeature} />
+
+      {activeFeature && (
+        <ComingSoon
+          feature={activeFeature}
+          onClose={() => setActiveFeature("")}
+        />
+      )}
+
       {/* Main conversation */}
       <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-3 py-3 sm:px-6 sm:py-5">
         <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] py-0 shadow-xl shadow-black/5 ring-0 dark:shadow-black/20">
@@ -249,38 +253,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Brain
-                size={16}
-                className={
-                  mode === "with-memory"
-                    ? "text-[var(--chat-accent)]"
-                    : "text-[var(--chat-muted)]"
-                }
-              />
-
-              <Select
-                value={mode}
-                onValueChange={handleModeChange}
-                disabled={loading}
-              >
-                <SelectTrigger
-                  aria-label="Conversation memory mode"
-                  className="h-9 w-[158px] border-[var(--chat-border)] bg-[var(--chat-soft)] text-xs shadow-none focus:ring-violet-400/30 sm:w-[175px]"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="with-memory">
-                    With memory
-                  </SelectItem>
-                  <SelectItem value="no-memory">
-                    Without memory
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           {/* Scrollable messages */}
@@ -293,14 +265,7 @@ export default function App() {
           >
             {messages.length === 0 ? (
               <div className="my-auto flex w-full flex-col items-center justify-center py-8 text-center">
-                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/15 to-indigo-500/10 text-[var(--chat-accent)] shadow-lg shadow-violet-950/20">
-                  <Sparkles size={27} />
-                </div>
-
-                <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-[var(--chat-accent)]">
-                  Ready when you are
-                </p>
-
+               
                 <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   What can we explore?
                 </h2>
@@ -337,97 +302,26 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              messages.map((message, index) => (
-                <div
-                  key={`${index}-${message.role}`}
-                  className={`flex items-start gap-3 ${
-                    message.role === "user" ? "flex-row-reverse" : ""
-                  }`}
-                >
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                      message.role === "user"
-                        ? "bg-violet-500/15 text-[var(--chat-accent)]"
-                        : "border border-[var(--chat-border)] bg-[var(--chat-soft)] text-[var(--chat-secondary)]"
-                    }`}
-                  >
-                    {message.role === "user" ? (
-                      <User size={16} />
-                    ) : (
-                      <Bot size={17} />
-                    )}
-                  </div>
-
-                  <div
-                    className={`min-w-0 max-w-[88%] [overflow-wrap:anywhere] text-sm leading-7 sm:max-w-[80%] ${
-                      message.role === "user"
-                        ? "whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-violet-600 px-4 py-3 text-white"
-                        : "chat-markdown pt-1 text-[var(--chat-text)]"
-                    }`}
-                  >
-                    {message.role === "user" ? message.content : (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
-                        {message.content}
-                      </ReactMarkdown>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-
-            {loading && (
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--chat-border)] bg-[var(--chat-soft)] text-[var(--chat-accent)]">
-                  <Bot size={17} />
-                </div>
-
-                <div className="flex items-center gap-2 rounded-xl bg-[var(--chat-soft)] px-3 py-2.5 text-sm text-[var(--chat-muted)]">
-                  <span className="flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-300 [animation-delay:-0.2s]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-300 [animation-delay:-0.1s]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-300" />
-                  </span>
-                  Thinking
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div
-                role="alert"
-                className="ml-11 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-sm leading-6 text-red-700 dark:text-red-300"
-              >
-                {error}
-              </div>
+              <Messages
+                messages={messages}
+                loading={loading}
+                error={error}
+              />
             )}
           </CardContent>
 
           {/* Message composer */}
           <div className="shrink-0 border-t border-[var(--chat-border)] bg-[var(--chat-footer)] px-3 pb-3 pt-4 sm:px-6 sm:pb-4">
-            <form
+            <MessageForm
+              inputRef={inputRef}
+              question={question}
+              onQuestionChange={setQuestion}
               onSubmit={handleSubmit}
-              className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-input)] p-2 transition-colors focus-within:border-violet-400/40 focus-within:ring-2 focus-within:ring-violet-400/[0.07]"
-            >
-              <Input
-                ref={inputRef}
-                aria-label="Your message"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Ask anything..."
-                disabled={loading}
-                autoComplete="off"
-                className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-[var(--chat-text)] shadow-none placeholder:text-[var(--chat-muted)] focus-visible:ring-0 dark:bg-transparent"
-              />
-
-              <Button
-                type="submit"
-                aria-label="Send message"
-                disabled={loading || !question.trim()}
-                className="h-10 w-10 shrink-0 rounded-xl bg-violet-600 p-0 text-white transition-colors hover:bg-violet-500 disabled:bg-[var(--chat-soft)] disabled:text-slate-600"
-              >
-                <Send size={17} />
-              </Button>
-            </form>
+              mode={mode}
+              onModeChange={handleModeChange}
+              modeOptions={MEMORY_MODE_OPTIONS}
+              loading={loading}
+            />
 
             <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-[var(--chat-muted)]">
               <span className="flex items-center gap-1.5">
